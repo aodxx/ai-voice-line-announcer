@@ -4,11 +4,62 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import {
+  addPersistentLineLog,
+  claimWebhookEvent,
+  clearPersistentLineLogs,
+  convertWavToM4a,
+  getAudioDurationMs,
+  getPersistentLineLogs,
+  publishAudioFile,
+} from './server/production.js';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 8080;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: express.Request, _res, buffer) => {
+    (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+  },
+}));
+
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const configuredKey = process.env.ADMIN_API_KEY;
+  if (!configuredKey) {
+    if (process.env.NODE_ENV !== 'production') return next();
+    return res.status(503).json({ error: 'ADMIN_API_KEY is not configured' });
+  }
+  const suppliedKey = req.header('x-admin-key') || '';
+  const expected = Buffer.from(configuredKey);
+  const actual = Buffer.from(suppliedKey);
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+function safeLineConfig(config: LineConfig) {
+  return {
+    channelAccessToken: '',
+    channelSecret: '',
+    hasChannelAccessToken: Boolean(config.channelAccessToken),
+    hasChannelSecret: Boolean(config.channelSecret),
+    defaultVoice: config.defaultVoice,
+    enabled: config.enabled,
+  };
+}
+
+function verifyLineSignature(req: express.Request, channelSecret: string): boolean {
+  const signature = req.header('x-line-signature');
+  const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
+  if (!signature || !rawBody || !channelSecret) return false;
+  const expected = crypto.createHmac('sha256', channelSecret).update(rawBody).digest('base64');
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(signature);
+  return expectedBuffer.length === suppliedBuffer.length
+    && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
 
 // Directories setup
 const audioDir = path.join(process.cwd(), 'audio');
@@ -188,6 +239,9 @@ function addLineLog(logItem: any) {
     logs.unshift(logItem);
     if (logs.length > 50) logs.length = 50;
     fs.writeFileSync(lineLogsFile, JSON.stringify(logs, null, 2));
+    void addPersistentLineLog(logItem).catch((error) => {
+      console.error('Error persisting LINE log to Firestore:', error);
+    });
   } catch (e) {
     console.error('Error adding LINE log:', e);
   }
@@ -587,9 +641,10 @@ async function processLineAnnouncement(rawMessageText: string, senderName: strin
     format: 'mp3',
   });
 
-  const fullAudioUrl = `${reqBaseUrl}${ttsResult.audioUrl}`;
-  const durationInSeconds = Math.max(2, Math.ceil(refinedText.length / 15));
-  const durationMs = durationInSeconds * 1000;
+  const wavPath = path.join(audioDir, ttsResult.filename);
+  const lineAudioPath = await convertWavToM4a(wavPath);
+  const fullAudioUrl = await publishAudioFile(lineAudioPath, reqBaseUrl);
+  const durationMs = await getAudioDurationMs(lineAudioPath);
 
   const audioMessage = {
     type: 'audio',
@@ -702,7 +757,7 @@ async function processLineAnnouncement(rawMessageText: string, senderName: strin
     senderName,
     refinedText,
     audioUrl: fullAudioUrl,
-    filename: ttsResult.filename,
+    filename: path.basename(lineAudioPath),
     durationMs,
     audioMessage,
     flexMessage,
@@ -710,17 +765,17 @@ async function processLineAnnouncement(rawMessageText: string, senderName: strin
 }
 
 // API endpoint: Get LINE Bot Config
-app.get('/api/line/config', (req: express.Request, res: express.Response) => {
+app.get('/api/line/config', requireAdmin, (req: express.Request, res: express.Response) => {
   try {
     const config = getLineConfig();
-    res.json(config);
+    res.json(safeLineConfig(config));
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to fetch LINE config' });
   }
 });
 
 // API endpoint: Verify LINE Channel Access Token with LINE API
-app.post('/api/line/verify-token', async (req: express.Request, res: express.Response) => {
+app.post('/api/line/verify-token', requireAdmin, async (req: express.Request, res: express.Response) => {
   try {
     const { token } = req.body;
     const accessToken = token || getLineConfig().channelAccessToken;
@@ -760,25 +815,27 @@ app.post('/api/line/verify-token', async (req: express.Request, res: express.Res
 });
 
 // API endpoint: Save LINE Bot Config
-app.post('/api/line/config', (req: express.Request, res: express.Response) => {
+app.post('/api/line/config', requireAdmin, (req: express.Request, res: express.Response) => {
   try {
     const { channelAccessToken, channelSecret, defaultVoice, enabled } = req.body;
     const config = getLineConfig();
-    config.channelAccessToken = channelAccessToken !== undefined ? channelAccessToken : config.channelAccessToken;
-    config.channelSecret = channelSecret !== undefined ? channelSecret : config.channelSecret;
+    if (process.env.NODE_ENV !== 'production') {
+      config.channelAccessToken = channelAccessToken || config.channelAccessToken;
+      config.channelSecret = channelSecret || config.channelSecret;
+    }
     config.defaultVoice = defaultVoice || config.defaultVoice;
     config.enabled = enabled !== undefined ? enabled : config.enabled;
-    saveLineConfig(config);
-    res.json({ success: true, config });
+    if (process.env.NODE_ENV !== 'production') saveLineConfig(config);
+    res.json({ success: true, config: safeLineConfig(config) });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to save LINE config' });
   }
 });
 
 // API endpoint: Get LINE Logs
-app.get('/api/line/logs', (req: express.Request, res: express.Response) => {
+app.get('/api/line/logs', requireAdmin, async (req: express.Request, res: express.Response) => {
   try {
-    const logs = getLineLogs();
+    const logs = await getPersistentLineLogs() || getLineLogs();
     res.json(logs);
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to fetch LINE logs' });
@@ -786,8 +843,9 @@ app.get('/api/line/logs', (req: express.Request, res: express.Response) => {
 });
 
 // API endpoint: Clear LINE Logs
-app.delete('/api/line/logs', (req: express.Request, res: express.Response) => {
+app.delete('/api/line/logs', requireAdmin, async (req: express.Request, res: express.Response) => {
   try {
+    await clearPersistentLineLogs();
     clearLineLogs();
     res.json({ success: true });
   } catch (e: any) {
@@ -796,7 +854,7 @@ app.delete('/api/line/logs', (req: express.Request, res: express.Response) => {
 });
 
 // API endpoint: Test LINE Announcement processing (Simulator)
-app.post('/api/line/test', async (req: express.Request, res: express.Response) => {
+app.post('/api/line/test', requireAdmin, async (req: express.Request, res: express.Response) => {
   try {
     const { rawText = '@แจ้งข่าว พรุ่งนี้มีการประชุมเวลา 10:00 น.', senderName = 'ประธานกลุ่ม' } = req.body;
     const baseUrl = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, '') : `${req.protocol}://${req.get('host')}`;
@@ -829,11 +887,15 @@ app.post('/api/line/test', async (req: express.Request, res: express.Response) =
 
 // API endpoint: LINE Webhook Receiver
 app.post('/api/line/webhook', async (req: express.Request, res: express.Response) => {
-  // Respond HTTP 200 OK immediately so LINE server never times out waiting for TTS audio generation
-  res.status(200).json({ status: 'ok' });
-
   try {
     const config = getLineConfig();
+    if (!verifyLineSignature(req, config.channelSecret)) {
+      return res.status(401).json({ error: 'Invalid LINE webhook signature' });
+    }
+
+    // Acknowledge after authenticity is confirmed. Audio generation continues asynchronously.
+    res.status(200).json({ status: 'accepted' });
+
     if (!config.enabled) {
       console.log('LINE bot is currently disabled in config');
       return;
@@ -860,6 +922,11 @@ app.post('/api/line/webhook', async (req: express.Request, res: express.Response
     }
 
     for (const event of events) {
+      if (!(await claimWebhookEvent(event.webhookEventId))) {
+        console.log(`Ignoring duplicate LINE webhook event: ${event.webhookEventId}`);
+        continue;
+      }
+
       const sourceType = event.source?.type || 'unknown';
       const sourceId = event.source?.groupId || event.source?.roomId || event.source?.userId || 'unknown';
       const userId = event.source?.userId;
@@ -885,7 +952,7 @@ app.post('/api/line/webhook', async (req: express.Request, res: express.Response
       const rawText = event.message.text || '';
 
       // Check if message contains @แจ้งข่าว
-      if (rawText.includes('@แจ้งข่าว')) {
+      if (/^\s*@แจ้งข่าว(?:\s|$)/i.test(rawText)) {
         let senderName = 'สมาชิกในกลุ่ม';
 
         if (config.channelAccessToken && userId) {
@@ -893,6 +960,8 @@ app.post('/api/line/webhook', async (req: express.Request, res: express.Response
             let profileUrl = `https://api.line.me/v2/bot/profile/${userId}`;
             if (groupId) {
               profileUrl = `https://api.line.me/v2/bot/group/${groupId}/member/${userId}`;
+            } else if (event.source?.roomId) {
+              profileUrl = `https://api.line.me/v2/bot/room/${event.source.roomId}/member/${userId}`;
             }
             const profileRes = await fetch(profileUrl, {
               headers: {
@@ -1014,7 +1083,18 @@ app.post('/api/line/webhook', async (req: express.Request, res: express.Response
     }
   } catch (error: any) {
     console.error('Error in async LINE webhook handler:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'LINE webhook processing failed' });
+    }
   }
+});
+
+app.get('/healthz', (_req: express.Request, res: express.Response) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'ai-voice-line-announcer',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // API endpoint: Delete History Item

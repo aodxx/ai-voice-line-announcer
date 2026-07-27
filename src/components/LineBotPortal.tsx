@@ -36,11 +36,14 @@ interface LineLog {
 interface LineConfig {
   channelAccessToken: string;
   channelSecret: string;
+  hasChannelAccessToken?: boolean;
+  hasChannelSecret?: boolean;
   defaultVoice: string;
   enabled: boolean;
 }
 
 export default function LineBotPortal() {
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('line_admin_api_key') || '');
   const [config, setConfig] = useState<LineConfig>({
     channelAccessToken: '',
     channelSecret: '',
@@ -67,13 +70,27 @@ export default function LineBotPortal() {
   const webhookUrl = `${window.location.origin}/api/line/webhook`;
 
   useEffect(() => {
+    if (adminKey) {
+      fetchConfig();
+      fetchLogs();
+    }
+  }, [adminKey]);
+
+  const adminHeaders = (json = false): Record<string, string> => ({
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    'x-admin-key': adminKey,
+  });
+
+  const saveAdminKey = () => {
+    localStorage.setItem('line_admin_api_key', adminKey.trim());
+    setAdminKey(adminKey.trim());
     fetchConfig();
     fetchLogs();
-  }, []);
+  };
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch('/api/line/config');
+      const res = await fetch('/api/line/config', { headers: adminHeaders() });
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
@@ -85,7 +102,7 @@ export default function LineBotPortal() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/api/line/logs');
+      const res = await fetch('/api/line/logs', { headers: adminHeaders() });
       if (res.ok) {
         const data = await res.json();
         setLogs(data);
@@ -96,7 +113,7 @@ export default function LineBotPortal() {
   };
 
   const handleVerifyToken = async () => {
-    if (!config.channelAccessToken) {
+    if (!config.channelAccessToken && !config.hasChannelAccessToken) {
       setVerifyStatus({ valid: false, error: 'กรุณากรอก Channel Access Token ก่อนกดตรวจสอบ' });
       return;
     }
@@ -105,7 +122,7 @@ export default function LineBotPortal() {
     try {
       const res = await fetch('/api/line/verify-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(true),
         body: JSON.stringify({ token: config.channelAccessToken }),
       });
       const data = await res.json();
@@ -124,7 +141,7 @@ export default function LineBotPortal() {
     try {
       const res = await fetch('/api/line/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(true),
         body: JSON.stringify(config),
       });
       if (res.ok) {
@@ -153,7 +170,7 @@ export default function LineBotPortal() {
     try {
       const res = await fetch('/api/line/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(true),
         body: JSON.stringify({
           rawText: simText,
           senderName: simSender,
@@ -176,7 +193,7 @@ export default function LineBotPortal() {
 
   const handleClearLogs = async () => {
     try {
-      await fetch('/api/line/logs', { method: 'DELETE' });
+      await fetch('/api/line/logs', { method: 'DELETE', headers: adminHeaders() });
       setLogs([]);
     } catch (err) {
       console.error('Failed to clear logs:', err);
@@ -202,7 +219,7 @@ export default function LineBotPortal() {
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-2 max-w-3xl leading-relaxed">
-              เมื่อมีคนพิมพ์คำว่า <code className="text-emerald-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 font-mono">@แจ้งข่าว [เนื้อหาข่าว]</code> ในกลุ่ม LINE ระบบจะดักจับข้อความโดยอัตโนมัติ ส่งให้ <strong className="text-white">Gemini AI</strong> ขัดเกลาคำพูดเป็นภาษาผู้ประกาศข่าวภาษาไทย แล้วแปลงเป็น <strong className="text-white">เสียงพากย์ (.MP3)</strong> พร้อมส่งกลับเข้ากลุ่ม LINE ในรูปแบบการ์ดข่าวสารทันที!
+              เมื่อมีคนพิมพ์คำว่า <code className="text-emerald-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 font-mono">@แจ้งข่าว [เนื้อหาข่าว]</code> ในกลุ่ม LINE ระบบจะดักจับข้อความโดยอัตโนมัติ ส่งให้ <strong className="text-white">Gemini AI</strong> ขัดเกลาคำพูดเป็นภาษาผู้ประกาศข่าวภาษาไทย แล้วแปลงเป็น <strong className="text-white">เสียงพากย์ (.M4A)</strong> พร้อมส่งกลับเข้ากลุ่ม LINE ในรูปแบบการ์ดข่าวสารทันที!
             </p>
           </div>
 
@@ -214,6 +231,34 @@ export default function LineBotPortal() {
             <span>{copiedUrl ? 'คัดลอก Webhook URL แล้ว' : 'คัดลอก Webhook URL'}</span>
           </button>
         </div>
+      </div>
+
+      <div className="bg-slate-900/90 border border-slate-800 p-5 rounded-3xl shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-end gap-3">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-400 mb-1">
+              Admin API Key
+            </label>
+            <input
+              type="password"
+              value={adminKey}
+              onChange={(event) => setAdminKey(event.target.value)}
+              placeholder="ใส่ ADMIN_API_KEY ที่ตั้งไว้ใน Cloud Run Secret Manager"
+              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={saveAdminKey}
+            disabled={!adminKey.trim()}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-2xl text-xs font-bold text-white"
+          >
+            เชื่อมต่อหน้าผู้ดูแล
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          ระบบจัดเก็บกุญแจนี้เฉพาะในเบราว์เซอร์เครื่องปัจจุบัน และ Backend จะไม่ส่ง LINE Token หรือ Channel Secret กลับมายังหน้าเว็บ
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -268,7 +313,7 @@ export default function LineBotPortal() {
                   <button
                     type="button"
                     onClick={handleVerifyToken}
-                    disabled={isVerifying || !config.channelAccessToken}
+                    disabled={isVerifying || (!config.channelAccessToken && !config.hasChannelAccessToken)}
                     className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition disabled:opacity-40 cursor-pointer"
                   >
                     {isVerifying ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
@@ -279,7 +324,7 @@ export default function LineBotPortal() {
                   type="password"
                   value={config.channelAccessToken}
                   onChange={(e) => setConfig({ ...config, channelAccessToken: e.target.value })}
-                  placeholder="วาง Channel Access Token จาก LINE Console..."
+                  placeholder={config.hasChannelAccessToken ? 'ตั้งค่า Token ใน Cloud Run Secret Manager แล้ว' : 'วาง Channel Access Token สำหรับโหมดพัฒนา...'}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
                 />
               </div>
@@ -326,7 +371,7 @@ export default function LineBotPortal() {
                   type="password"
                   value={config.channelSecret}
                   onChange={(e) => setConfig({ ...config, channelSecret: e.target.value })}
-                  placeholder="วาง Channel Secret จาก LINE Console..."
+                  placeholder={config.hasChannelSecret ? 'ตั้งค่า Secret ใน Cloud Run Secret Manager แล้ว' : 'วาง Channel Secret สำหรับโหมดพัฒนา...'}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
                 />
               </div>
@@ -389,7 +434,7 @@ export default function LineBotPortal() {
                   <span>ปิด "ข้อความตอบกลับอัตโนมัติ" (Auto-response messages)</span>
                 </p>
                 <p className="text-[11px] text-slate-400 pl-6">
-                  เข้าหน้า <a href="https://manager.line.biz/" target="_blank" rel="noreferrer" className="text-emerald-400 underline">LINE Official Account Manager</a> &rarr; ตั้งค่าตอบรับ (Response Settings) &rarr; <strong className="text-rose-400">ปิด "ข้อความตอบกลับอัตโนมัติ" (Off)</strong> หากเปิดไว้ LINE จะบล็อกไม่ส่ง Webhook เข้าเซิร์ฟเวอร์!
+                  เข้าหน้า <a href="https://manager.line.biz/" target="_blank" rel="noreferrer" className="text-emerald-400 underline">LINE Official Account Manager</a> &rarr; ตั้งค่าตอบรับ (Response Settings) &rarr; แนะนำให้ <strong className="text-rose-400">ปิด "ข้อความตอบกลับอัตโนมัติ" (Off)</strong> เพื่อไม่ให้สมาชิกได้รับคำตอบซ้ำ ทั้งนี้การเปิดข้อความตอบกลับอัตโนมัติไม่ได้ปิดกั้น Webhook
                 </p>
               </div>
 
@@ -502,7 +547,7 @@ export default function LineBotPortal() {
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
                   <p className="text-[10px] font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Volume2 className="h-3.5 w-3.5" />
-                    <span>เสียงสังเคราะห์จาก AI Voice Studio (.MP3):</span>
+                    <span>เสียงสังเคราะห์จาก AI Voice Studio (.M4A):</span>
                   </p>
                   <audio src={simResult.audioUrl} controls className="w-full h-10 rounded-xl bg-slate-900" />
                 </div>

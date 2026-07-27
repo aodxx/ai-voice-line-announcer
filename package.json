@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "ai-voice-line-announcer",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@google-cloud/firestore": "^7.11.5",
+    "@google-cloud/storage": "^7.16.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",

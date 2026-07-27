@@ -1,0 +1,41 @@
+substitutions:
+  _REGION: asia-southeast1
+  _SERVICE: ai-voice-line-announcer
+  _REPOSITORY: ai-voice-line-announcer
+  _AUDIO_BUCKET: CHANGE_ME_AUDIO_BUCKET
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --cpu=1
+      - --memory=1Gi
+      - --concurrency=20
+      - --timeout=300
+      - --max-instances=3
+      - --no-cpu-throttling
+      - --set-env-vars=GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCS_AUDIO_BUCKET=${_AUDIO_BUCKET},FIRESTORE_LINE_LOGS_COLLECTION=line_webhook_logs,FIRESTORE_LINE_EVENTS_COLLECTION=line_webhook_events
+      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest,LINE_CHANNEL_ACCESS_TOKEN=line-channel-access-token:latest,LINE_CHANNEL_SECRET=line-channel-secret:latest,ADMIN_API_KEY=admin-api-key:latest
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}

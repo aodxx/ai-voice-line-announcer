@@ -1,1 +1,1 @@
-# ai-voice-line-announcer  เปิดแล้ส
+# ai-voice-line-announcer 

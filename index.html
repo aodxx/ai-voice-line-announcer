@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Voice Studio</title>
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#c8502a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AI Voice Studio" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- Register Service Worker -->
+    <script>
+      try {
+        if (typeof window !== 'undefined' && 'navigator' in window && 'serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            try {
+              navigator.serviceWorker.register('/sw.js')
+                .then(reg => {
+                  if (reg) {
+                    console.log('Service Worker registered successfully with scope:', reg.scope);
+                  }
+                })
+                .catch(err => {
+                  console.warn('Service Worker registration failed:', err);
+                });
+            } catch (innerErr) {
+              console.warn('Failed during Service Worker registration call:', innerErr);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Service Worker is not supported or blocked in this environment:', err);
+      }
+    </script>
+  </body>
+</html>
+

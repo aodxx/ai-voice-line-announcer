@@ -243,7 +243,7 @@ export default function LineBotPortal() {
               type="password"
               value={adminKey}
               onChange={(event) => setAdminKey(event.target.value)}
-              placeholder="ใส่ ADMIN_API_KEY ที่ตั้งไว้ใน Cloud Run Secret Manager"
+              placeholder="ใส่ ADMIN_API_KEY ที่ตั้งไว้ใน Koyeb Environment Variables"
               className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
             />
           </div>
@@ -324,7 +324,7 @@ export default function LineBotPortal() {
                   type="password"
                   value={config.channelAccessToken}
                   onChange={(e) => setConfig({ ...config, channelAccessToken: e.target.value })}
-                  placeholder={config.hasChannelAccessToken ? 'ตั้งค่า Token ใน Cloud Run Secret Manager แล้ว' : 'วาง Channel Access Token สำหรับโหมดพัฒนา...'}
+                  placeholder={config.hasChannelAccessToken ? 'ตั้งค่า Token ใน Koyeb แล้ว' : 'วาง Channel Access Token สำหรับโหมดพัฒนา...'}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
                 />
               </div>
@@ -371,7 +371,7 @@ export default function LineBotPortal() {
                   type="password"
                   value={config.channelSecret}
                   onChange={(e) => setConfig({ ...config, channelSecret: e.target.value })}
-                  placeholder={config.hasChannelSecret ? 'ตั้งค่า Secret ใน Cloud Run Secret Manager แล้ว' : 'วาง Channel Secret สำหรับโหมดพัฒนา...'}
+                  placeholder={config.hasChannelSecret ? 'ตั้งค่า Secret ใน Koyeb แล้ว' : 'วาง Channel Secret สำหรับโหมดพัฒนา...'}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-mono"
                 />
               </div>

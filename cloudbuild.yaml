@@ -2,7 +2,8 @@ substitutions:
   _REGION: asia-southeast1
   _SERVICE: ai-voice-line-announcer
   _REPOSITORY: ai-voice-line-announcer
-  _AUDIO_BUCKET: CHANGE_ME_AUDIO_BUCKET
+  _AUDIO_BUCKET: ai-voice-line-announcer.firebasestorage.app
+  _RUNTIME_SERVICE_ACCOUNT: ai-voice-runtime@${PROJECT_ID}.iam.gserviceaccount.com
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -27,15 +28,18 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
+      - --service-account=${_RUNTIME_SERVICE_ACCOUNT}
       - --port=8080
       - --cpu=1
       - --memory=1Gi
       - --concurrency=20
       - --timeout=300
       - --max-instances=3
-      - --no-cpu-throttling
-      - --set-env-vars=GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCS_AUDIO_BUCKET=${_AUDIO_BUCKET},FIRESTORE_LINE_LOGS_COLLECTION=line_webhook_logs,FIRESTORE_LINE_EVENTS_COLLECTION=line_webhook_events
-      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest,LINE_CHANNEL_ACCESS_TOKEN=line-channel-access-token:latest,LINE_CHANNEL_SECRET=line-channel-secret:latest,ADMIN_API_KEY=admin-api-key:latest
+      - --set-env-vars=NODE_ENV=production,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCLOUD_PROJECT=${PROJECT_ID},GCS_AUDIO_BUCKET=${_AUDIO_BUCKET},FIREBASE_STORAGE_BUCKET=${_AUDIO_BUCKET},FIRESTORE_ANNOUNCEMENTS_COLLECTION=announcements,FIRESTORE_LINE_LOGS_COLLECTION=line_webhook_logs,FIRESTORE_LINE_EVENTS_COLLECTION=line_webhook_events,FIRESTORE_ADMIN_USERS_COLLECTION=admin_users
+      - --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,LINE_CHANNEL_ACCESS_TOKEN=LINE_CHANNEL_ACCESS_TOKEN:latest,LINE_CHANNEL_SECRET=LINE_CHANNEL_SECRET:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

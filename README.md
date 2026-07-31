@@ -10,10 +10,10 @@ AI Voice Studio ที่รับคำสั่ง `@แจ้งข่าว`
 3. รับเฉพาะข้อความที่ขึ้นต้นด้วย `@แจ้งข่าว`
 4. Gemini เรียบเรียงข้อความและสร้างเสียง
 5. FFmpeg แปลง WAV เป็น M4A/AAC สำหรับ LINE
-6. เก็บไฟล์ใน Cloud Storage และเก็บประวัติ/ป้องกัน Event ซ้ำด้วย Firestore
+6. เก็บไฟล์เสียง ประวัติ และ Event ID ใน Supabase
 7. ตอบกลับห้องเดิมด้วย Audio Message และ Flex Message
 
-คำแนะนำการติดตั้งฉบับเต็มอยู่ที่ [CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md)
+คำแนะนำการติดตั้งฉบับเต็มอยู่ที่ [KOYEB_SUPABASE_DEPLOYMENT.md](KOYEB_SUPABASE_DEPLOYMENT.md)
 
 ## พัฒนาในเครื่อง
 

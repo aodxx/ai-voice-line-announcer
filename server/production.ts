@@ -1,13 +1,19 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { Firestore } from '@google-cloud/firestore';
-import { Storage } from '@google-cloud/storage';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const firestore = process.env.GOOGLE_CLOUD_PROJECT ? new Firestore() : null;
-const storage = process.env.GCS_AUDIO_BUCKET ? new Storage() : null;
-const lineLogsCollection = process.env.FIRESTORE_LINE_LOGS_COLLECTION || 'line_webhook_logs';
-const lineEventsCollection = process.env.FIRESTORE_LINE_EVENTS_COLLECTION || 'line_webhook_events';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const audioBucket = process.env.SUPABASE_AUDIO_BUCKET || 'line-audio';
+const lineLogsTable = process.env.SUPABASE_LINE_LOGS_TABLE || 'line_webhook_logs';
+const lineEventsTable = process.env.SUPABASE_LINE_EVENTS_TABLE || 'line_webhook_events';
+
+const supabase: SupabaseClient | null = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
 
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -74,65 +80,67 @@ export async function getAudioDurationMs(filePath: string): Promise<number> {
 
 export async function publishAudioFile(filePath: string, baseUrl: string): Promise<string> {
   const filename = path.basename(filePath);
-  const bucketName = process.env.GCS_AUDIO_BUCKET;
 
-  if (!storage || !bucketName) {
+  if (!supabase) {
     return `${baseUrl}/audio/${encodeURIComponent(filename)}`;
   }
 
-  const destination = `line-audio/${filename}`;
-  await storage.bucket(bucketName).upload(filePath, {
-    destination,
-    metadata: {
-      cacheControl: 'public, max-age=86400',
-      contentType: 'audio/mp4',
-    },
+  const objectPath = `announcements/${filename}`;
+  const audio = fs.readFileSync(filePath);
+  const { error } = await supabase.storage.from(audioBucket).upload(objectPath, audio, {
+    cacheControl: '86400',
+    contentType: 'audio/mp4',
+    upsert: false,
   });
+  if (error) throw new Error(`Supabase audio upload failed: ${error.message}`);
 
-  return `https://storage.googleapis.com/${bucketName}/${destination}`;
+  const { data } = supabase.storage.from(audioBucket).getPublicUrl(objectPath);
+  return data.publicUrl;
 }
 
 export async function addPersistentLineLog(logItem: Record<string, unknown>): Promise<void> {
-  if (!firestore) return;
-  await firestore.collection(lineLogsCollection).doc(String(logItem.id)).set(logItem);
+  if (!supabase) return;
+  const { error } = await supabase.from(lineLogsTable).upsert({
+    id: String(logItem.id),
+    timestamp: logItem.timestamp,
+    payload: logItem,
+  });
+  if (error) throw new Error(`Supabase log insert failed: ${error.message}`);
 }
 
 export async function getPersistentLineLogs(limit = 50): Promise<Record<string, unknown>[] | null> {
-  if (!firestore) return null;
-  const snapshot = await firestore
-    .collection(lineLogsCollection)
-    .orderBy('timestamp', 'desc')
-    .limit(limit)
-    .get();
-  return snapshot.docs.map((doc) => doc.data());
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from(lineLogsTable)
+    .select('payload')
+    .order('timestamp', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`Supabase log query failed: ${error.message}`);
+  return data.map((row) => row.payload as Record<string, unknown>);
 }
 
 export async function clearPersistentLineLogs(): Promise<boolean> {
-  if (!firestore) return false;
-  const snapshot = await firestore.collection(lineLogsCollection).limit(200).get();
-  const batch = firestore.batch();
-  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-  await batch.commit();
+  if (!supabase) return false;
+  const { error } = await supabase.from(lineLogsTable).delete().not('id', 'is', null);
+  if (error) throw new Error(`Supabase log cleanup failed: ${error.message}`);
   return true;
 }
 
 export async function claimWebhookEvent(webhookEventId?: string): Promise<boolean> {
   if (!webhookEventId) return true;
 
-  if (!firestore) {
+  if (!supabase) {
     return true;
   }
 
-  try {
-    await firestore.collection(lineEventsCollection).doc(webhookEventId).create({
-      receivedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    });
-    return true;
-  } catch (error: any) {
-    if (error?.code === 6 || error?.code === 'already-exists') return false;
-    throw error;
-  }
+  const { error } = await supabase.from(lineEventsTable).insert({
+    webhook_event_id: webhookEventId,
+    received_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  if (!error) return true;
+  if (error.code === '23505') return false;
+  throw new Error(`Supabase event claim failed: ${error.message}`);
 }
 
 export function removeLocalFile(filePath: string): void {

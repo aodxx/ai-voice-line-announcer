@@ -240,7 +240,7 @@ function addLineLog(logItem: any) {
     if (logs.length > 50) logs.length = 50;
     fs.writeFileSync(lineLogsFile, JSON.stringify(logs, null, 2));
     void addPersistentLineLog(logItem).catch((error) => {
-      console.error('Error persisting LINE log to Firestore:', error);
+      console.error('Error persisting LINE log to Supabase:', error);
     });
   } catch (e) {
     console.error('Error adding LINE log:', e);

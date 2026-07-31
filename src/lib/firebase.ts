@@ -5,27 +5,14 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDrAQT7v3mTt-NmCE0s7GK1YVr1Yv3Kwk4',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'ai-voice-line-announcer.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'ai-voice-line-announcer',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'ai-voice-line-announcer.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '889050815495',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:889050815495:web:4b3733bcc2a91813d09a55',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-XHQJDPSGKC',
 };
-
-const requiredValues = [
-  firebaseConfig.apiKey,
-  firebaseConfig.authDomain,
-  firebaseConfig.projectId,
-  firebaseConfig.storageBucket,
-  firebaseConfig.messagingSenderId,
-  firebaseConfig.appId,
-];
-
-if (requiredValues.some((value) => !value)) {
-  console.warn('Firebase configuration is incomplete. Check VITE_FIREBASE_* variables.');
-}
 
 export const firebaseApp = initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(firebaseApp);

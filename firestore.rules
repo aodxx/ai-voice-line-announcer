@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'pantipa3826@gmail.com'
+      );
+    }
+
+    match /announcements/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /line_webhook_logs/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /line_webhook_events/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /system_settings/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    match /admin_users/{userId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

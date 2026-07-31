@@ -6,6 +6,15 @@ export interface AuthenticatedRequest extends Request {
   firebaseUser?: DecodedIdToken;
 }
 
+function configuredAdminEmails(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 export async function requireFirebaseUser(
   req: AuthenticatedRequest,
   res: Response,
@@ -33,12 +42,17 @@ export async function requireFirebaseAdmin(
   next: NextFunction,
 ) {
   await requireFirebaseUser(req, res, () => {
-    if (!req.firebaseUser) {
+    const user = req.firebaseUser;
+    if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const isAdmin = req.firebaseUser.admin === true;
-    if (!isAdmin) {
+    const email = typeof user.email === 'string' ? user.email.toLowerCase() : '';
+    const allowedEmails = configuredAdminEmails();
+    const hasAdminClaim = user.admin === true;
+    const hasAllowedEmail = Boolean(email && allowedEmails.has(email));
+
+    if (!hasAdminClaim && !hasAllowedEmail) {
       return res.status(403).json({ error: 'Administrator permission required' });
     }
 

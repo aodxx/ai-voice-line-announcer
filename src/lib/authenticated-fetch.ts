@@ -1,4 +1,4 @@
-import { auth } from './firebase';
+import { firebaseAuth } from './firebase';
 
 let installed = false;
 
@@ -23,7 +23,7 @@ export function installAuthenticatedFetch() {
       return nativeFetch(input, init);
     }
 
-    const user = auth.currentUser;
+    const user = firebaseAuth.currentUser;
     if (!user) return nativeFetch(input, init);
 
     const token = await user.getIdToken();

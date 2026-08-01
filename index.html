@@ -1,44 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html lang="th">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Voice Studio</title>
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#c8502a" />
+    <title>AI Voice LINE Announcer</title>
+    <meta name="theme-color" content="#020617" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="AI Voice Studio" />
+    <meta name="apple-mobile-web-app-title" content="AI Voice LINE Announcer" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.json" />
+    <style>
+      html, body, #root { min-height: 100%; margin: 0; }
+      body { background: #020617; color: #fff; font-family: system-ui, sans-serif; }
+      #boot-status { min-height: 100vh; display: grid; place-items: center; padding: 24px; text-align: center; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-    <!-- Register Service Worker -->
+    <div id="root">
+      <div id="boot-status">กำลังเปิด AI Voice LINE Announcer...</div>
+    </div>
     <script>
-      try {
-        if (typeof window !== 'undefined' && 'navigator' in window && 'serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            try {
-              navigator.serviceWorker.register('/sw.js')
-                .then(reg => {
-                  if (reg) {
-                    console.log('Service Worker registered successfully with scope:', reg.scope);
-                  }
-                })
-                .catch(err => {
-                  console.warn('Service Worker registration failed:', err);
-                });
-            } catch (innerErr) {
-              console.warn('Failed during Service Worker registration call:', innerErr);
-            }
-          });
+      // Remove legacy service workers and caches that can keep an obsolete blank build alive.
+      window.addEventListener('load', async () => {
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+          }
+        } catch (error) {
+          console.warn('Unable to clear legacy PWA cache:', error);
         }
-      } catch (err) {
-        console.warn('Service Worker is not supported or blocked in this environment:', err);
-      }
+      });
+
+      window.addEventListener('error', (event) => {
+        const root = document.getElementById('root');
+        if (root && !root.dataset.rendered) {
+          root.innerHTML = '<main id="boot-status"><div><h1>เปิดแอปไม่สำเร็จ</h1><p>เกิดข้อผิดพลาดขณะโหลดหน้าเว็บ</p><pre style="white-space:pre-wrap;color:#fca5a5">' + String(event.message || 'Unknown error') + '</pre></div></main>';
+        }
+      });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        const root = document.getElementById('root');
+        if (root && !root.dataset.rendered) {
+          root.innerHTML = '<main id="boot-status"><div><h1>เปิดแอปไม่สำเร็จ</h1><p>เกิดข้อผิดพลาดขณะเริ่มระบบ</p><pre style="white-space:pre-wrap;color:#fca5a5">' + String(event.reason || 'Unknown error') + '</pre></div></main>';
+        }
+      });
     </script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

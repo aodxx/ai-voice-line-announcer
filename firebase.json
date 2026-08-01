@@ -6,6 +6,27 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
+        "source": "/health",
+        "run": {
+          "serviceId": "ai-voice-line-announcer",
+          "region": "asia-southeast1"
+        }
+      },
+      {
+        "source": "/healthz",
+        "run": {
+          "serviceId": "ai-voice-line-announcer",
+          "region": "asia-southeast1"
+        }
+      },
+      {
+        "source": "/ready",
+        "run": {
+          "serviceId": "ai-voice-line-announcer",
+          "region": "asia-southeast1"
+        }
+      },
+      {
         "source": "/api/**",
         "run": {
           "serviceId": "ai-voice-line-announcer",
